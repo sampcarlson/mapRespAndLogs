@@ -10,8 +10,7 @@ dbGetQuery(leakyDB,"SELECT * FROM Batches")
 dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
 
 
-
-segData=dataByBatch(6)[,c("locationIDX","jamsPerKm","elevation","latRange_50","slope","SPI","UAA")]
+segData=dataByBatch(6)[,c("locationIDX","jamsPerKm","elevation","elevRange_25","latRange_25","latRange_50","slope","SPI","UAA")]
 
 #get / match some categorical data
 segDataCats=dataByBatch(6,meow=T)
@@ -45,38 +44,31 @@ summary(u)
 dredge(u)
 points(predict(u)~log(jamData$UAA), pch="*")
 
+plot(jamData$jamsPerKm~log(jamData$UAA))
+u=glm(jamsPerKm~poly(log(UAA),2), data=jamData,na.action=na.fail)
+summary(u)
+dredge(u)
+points(predict(u)~log(jamData$UAA), pch="*")
 
-plot(jamData$jamsPerKm~jamData$UAA)
 
-plot(jamData$jamsPerKm~jamData$slope)
 
-plot(jamData$jamsPerKm~jamData$SPI)
+plot(jamData$jamsPerKm~sqrt(jamData$UAA))
+
+plot(jamData$jamsPerKm~sqrt(jamData$slope))
+
+plot(jamData$jamsPerKm~sqrt(jamData$SPI))
 
 plot(jamData$jamsPerKm~jamData$elevation)
 
+plot(jamData$jamsPerKm~jamData$latRange_25)
 plot(jamData$jamsPerKm~jamData$latRange_50)
+plot(jamData$jamsPerKm~jamData$elevRange_25)
 
 
-#keeping df seperate makes predict easier to use
-logitJams=glm(jamsHere~log(UAA) + I(log(UAA)^2)+latRange_50+slope,data=jamData,family = binomial,na.action = na.fail)
-summary(logitJams)
-dredge(logitJams,extra="R^2")
-plot(logitJams$fitted.values,jamData$jamsHere)
-boxplot(logitJams$fitted.values~jamData$jamsHere,xlab="dense jams observed (j/km >=5)",ylab="predicted probability of dense jams",main="logit model of dense jams")
-
-
-plot(logitJams$fitted.values~jamData$latRange_50)
-
-segDataPredict=data.frame(locationIDX=segData$locationIDX,
-                          denseJamProbability=plogis(predict.glm(logitJams,newdata=data.frame(latRange_50=segData$latRange_50,
-                                                                                              slope=segData$slope,
-                                                                                              SPI = segData$SPI))))
-
-hist(segDataPredict$denseJamProbability) #seems a little high
-
-#join dataPredict to coords
-segDataPredict=left_join(segDataPredict,
-                         dbGetQuery(leakyDB,"SELECT Locations.locationIDX,Points.X, Points.Y FROM Locations LEFT JOIN Points ON Locations.locationIDX = Points.pointIDX"))
-write.csv(segDataPredict,"predictedDenseJamProbability")
-
+############# play with high degree polynomials##########
+plot(jamData$jamsPerKm~jamData$UAA)
+pj=glm(jamsPerKm~poly(UAA,2), data=jamData,na.action=na.fail)
+summary(pj)
+dredge(pj)
+points(1:200,predict(object=pj,newdata=data.frame(UAA=1:200)), pch="*")
 
