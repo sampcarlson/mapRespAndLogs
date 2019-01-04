@@ -10,12 +10,14 @@ dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
 
 
 
-metabData=dataByBatch(3,excludeDataTypeIDXs = c(42,68))
+metabData=dataByBatch(3,excludeDataTypeIDXs = c(37,58))
 plot(metabData$mean_jamsPerKm,-metabData$ER)
 metabModel=lm(-metabData$ER~metabData$mean_jamsPerKm)
 summary(metabModel)
 
-#no temperature effect apparent
+#not much temperature effect apparent, especially after jam fit
+plot(-metabData$ER,metabData$temperature)
+
 plot(metabModel$residuals,metabData$temperature)
 
 

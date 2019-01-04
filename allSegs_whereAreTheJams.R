@@ -15,7 +15,7 @@ segData=dataByBatch(6)[,c("locationIDX","jamsPerKm","elevation","elevRange_25","
 #get / match some categorical data
 segDataCats=dataByBatch(6,meow=T)
 #i'm going to use my dem-derived 'confinement' term, but I need something for land use / mgmt
-segDataCats=segDataCats[segDataCats$dataTypeIDX==27,]
+segDataCats=segDataCats[segDataCats$dataTypeIDX==22,]
 segDataCats=left_join(segDataCats,dataByBatch(6)[,c("locationIDX","standAge")])
 boxplot(segDataCats$standAge~segDataCats$value,ylim=c(0,500))
 #use 100 year stand age as cutoff for old/young
@@ -28,9 +28,6 @@ jaModel=lm(jamData$jamsPerKm~jamData$elevation+jamData$latRange_50+jamData$slope
 summary(jaModel)
 dredge(jaModel)
 
-jamData$jamsHere=jamData$jamsPerKm>=5
-logitJams=glm(jamData$jamsHere~jamData$elevation+jamData$latRange_50+jamData$slope+jamData$SPI+jamData$UAA,family = binomial,na.action = na.fail)
-dredge(logitJams)
 
 
 #consider non-linear relationships
@@ -38,16 +35,12 @@ dredge(logitJams)
 hist(log(jamData$UAA))
 
 plot(jamData$jamsPerKm~log(jamData$UAA))
+u=glm(jamsPerKm~poly(log(UAA),2)+latRange_25, data=jamData,na.action=na.fail)
 
-u=glm(jamsPerKm~log(UAA)+I(log(UAA)^2), data=jamData,na.action=na.fail)
-summary(u)
-dredge(u)
-points(predict(u)~log(jamData$UAA), pch="*")
+u=glm(jamsPerKm~poly(log(UAA),2)+poly(log(SPI),2)+slope + latRange_25, data=jamData,na.action=na.fail)
 
-plot(jamData$jamsPerKm~log(jamData$UAA))
-u=glm(jamsPerKm~poly(log(UAA),2), data=jamData,na.action=na.fail)
 summary(u)
-dredge(u)
+dredge(u,extra="R^2")
 points(predict(u)~log(jamData$UAA), pch="*")
 
 
