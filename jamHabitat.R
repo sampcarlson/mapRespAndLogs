@@ -9,61 +9,88 @@ leakyDB=dbConnect(SQLite(),"C:/Users/sam/Documents/LeakyRivers/Data/sqLiteDataba
 dbGetQuery(leakyDB,"SELECT * FROM Batches")
 dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
 
+wlData=dataByBatch(4)[,c("locationIDX","jamsPerKm","mean_latRange_10","mean_elevation","mean_slope","mean_SPI","mean_UAA")]
+hist(wlData$jamsPerKm)
+sum(wlData$jamsPerKm<=5)/nrow(wlData)
+wbData=dataByBatch(5)[,c("locationIDX","jamsPerKm","mean_latRange_10","mean_elevation","mean_slope","mean_SPI","mean_UAA")]
+hist(wbData$jamsPerKm)
+sum(wbData$jamsPerKm<=5)/nrow(wbData)
 
-segData=dataByBatch(6)[,c("locationIDX","jamsPerKm","elevation","latRange_25","latRange_50","slope","SPI","UAA")]
+jamData=rbind(wlData,wbData)
 
-#get / match some categorical data
-segDataCats=dataByBatch(6,meow=T)
+wlDataCats=dataByBatch(4,meow=T)
+wbDataCats=dataByBatch(5,meow=T)
+
 #i'm going to use my dem-derived 'confinement' term, but I need something for land use / mgmt
-segDataCats=segDataCats[segDataCats$dataTypeIDX==22,]
-segDataCats=left_join(segDataCats,dataByBatch(6)[,c("locationIDX","standAge")])
-boxplot(segDataCats$standAge~segDataCats$value,ylim=c(0,500))
-#use 100 year stand age as cutoff for old/young
-#all nsv is unmanage
+jamDataCats=rbind(wlDataCats[wlDataCats$dataTypeIDX==22,][,c("locationIDX","value")],
+                  wbDataCats[wbDataCats$dataTypeIDX==42,][,c("locationIDX","value")])
+names(jamDataCats)[2]="mgmt"
+jamData=left_join(jamData,jamDataCats)
+
+jamData$isManaged=jamData$mgmt=="YM"
+
+jamData$jamsHere=F
+jamData$jamsHere[jamData$jamsPerKm>5]=T
+
+fitData=jamData[complete.cases(jamData),]
+
+hist(fitData$jamsPerKm)
+
+sparse_wt=sum(fitData$jamsHere)/sum(!fitData$jamsHere)
 
 
-segData$jamsHere=F
-segData$jamsHere[segData$jamsPerKm>5]=T
+fitData$weight=1
+fitData$weight[!fitData$jamsHere]=sparse_wt
 
-#dropping this will keep all seg data, keeping it will drop unsurveyed areas
-#segData$jamsPerKm=NULL
-
-fitData=segData[complete.cases(segData),]
+hist(fitData$jamsPerKm[fitData$jamsHere])
+hist(fitData$jamsPerKm[!fitData$jamsHere])
 
 
-boxplot(fitData$UAA~fitData$jamsHere)
-boxplot(fitData$slope~fitData$jamsHere,range=0.001)
-boxplot(fitData$SPI~fitData$jamsHere)
+hist(fitData$jamsPerKm[fitData$isManaged])
+hist(fitData$jamsPerKm[!fitData$isManaged])
 
 
-#boxplot(fitData$elevRange_25~fitData$jamsHere)
-boxplot(fitData$latRange_25~fitData$jamsHere)
-boxplot(fitData$latRange_50~fitData$jamsHere)
+boxplot(fitData$jamsPerKm~fitData$isManaged)
+
+fitData$lUAA=log(fitData$mean_UAA)
 
 
-#keeping df seperate makes predict easier to use
-fitData$lUAA=log(fitData$UAA)
-logitJams=glm(jamsHere~poly(lUAA,2)*latRange_25,data=fitData,family = binomial,na.action = na.fail)
+#logitJams=glm(jamsHere~isManaged+(mean_elevation*poly(lUAA,2)*mean_latRange_10)^2,weights = fitData$weight ,data=fitData,family = binomial,na.action = na.fail)
 
-#logitJams=glm(jamsHere~poly(lUAA,2)+poly(SPI,2)+latRange_25,data=fitData,family = binomial,na.action = na.fail)
+logitJams=glm(jamsHere~isManaged+mean_elevation+poly(lUAA,2)+mean_latRange_10,weights = fitData$weight ,data=fitData,family = binomial,na.action = na.fail)
+
+logitJams=glm(jamsHere~poly(lUAA,2),weights = fitData$weight ,data=fitData,family = binomial,na.action = na.fail)
+
 
 summary(logitJams)
-dredge(logitJams,extra="R^2")
+
+getSparseMean=function(m){
+  return(mean(m$fitted.values[fitData$jamsHere==F]))
+}
+dredge(logitJams,extra= c("getSparseMean","R^2"))
+
+
 boxplot(logitJams$fitted.values~fitData$jamsHere,range=1.5,
         xlab="dense jams observed (j/km >=5)",ylab="predicted probability of dense jams",main="logit model of dense jams")
 
 
-plot(plogis(predict(logitJams))~fitData$UAA)
-plot(plogis(predict(logitJams))~fitData$slope)
+
+plot(plogis(predict(logitJams))~fitData$lUAA)
+plot(plogis(predict(logitJams))~fitData$mean_elevation)
+
+segData=dataByBatch(6)[,c("locationIDX","latRange_10","latRange_50","slope","SPI","UAA")]
 
 segDataPredict=data.frame(locationIDX=segData$locationIDX,
                           denseJamProbability=plogis(predict.glm(logitJams,newdata=data.frame(lUAA=log(segData$UAA),
-                                                                                              latRange_25=segData$latRange_25))))
-segDataPredict$denseJamProbability=round(segDataPredict$denseJamProbability,3)
-
-hist(segDataPredict$denseJamProbability) #seems OK!
+                                                                                              mean_latRange_25=segData$latRange_25,
+                                                                                              mean_slope=segData$slope,
+                                                                                              isManaged=F))))
+hist(segDataPredict$denseJamProbability) 
 
 plot(segDataPredict$denseJamProbability~segData$slope)
+
+plot(segDataPredict$denseJamProbability~segData$UAA)
+
 
 #join dataPredict to coords
 segDataPredict=left_join(segDataPredict,
@@ -71,44 +98,15 @@ segDataPredict=left_join(segDataPredict,
 write.csv(segDataPredict,"predictedDenseJamProbability.csv")
 
 
+nsvData=dataByBatch(6)[,c("locationIDX","latRange_10","elevation","slope","SPI","UAA","jamsPerKm")]
+nsv_locations=dbGetQuery(leakyDB,"SELECT locationIDX FROM Locations WHERE Locations.watershedID = 'NSV_def'")
+nsvData=inner_join(nsv_locations,nsvData)
+nrow(nsvData)/10 # km
+hist(nsvData$elevation)
 
-#########consider the form of a negative binomial distribution as a possible form for jams~uaa
-# nb_func=function(r,p=0.5,kmin=0){
-#   return((r-1)*(1-p)^r*p^kmin)
-# }
-# plot(nb_func(1:100,p=0.2))
-# 
-# plot(fitData$jamsPerKm~fitData$UAA)
-# 
-# uaa_nls=nls(jamsPerKm~(UAA-1)*(p)^UAA,data=fitData,start=list(p=0.5))
-# points(fitData$UAA,predict(uaa_nls),pch="*")
-# 
-# 
-# glm(jamsPerKm~(UAA-1)*(p^UAA),data=fitData,start=list(p=0.5))
-# 
-# library(gnlm)
-# jamsHere_cols=cbind(fitData$jamsHere,!fitData$jamsHere)
-# fitU=fitData$UAA
-# bnlr(y=jamsHere_cols,mu = ~ p * UAA^UAA - p^UAA,pmu=c(0))
-# 
-# bnlr(y=jamsHere_cols,mu = ~ p*fitU ,pmu=c(0,0))
-# 
-# 
-# dat <- data.frame(  x = rnorm(10),
-#                     gap = rnorm(10),
-#                     sca = rnorm(10),
-#                     y = rbinom(10,1,0.4))
-# y_cbind = cbind(dat$y, 1-dat$y)
-# attach(dat)
-# bnlr(y=y_cbind, mu = ~ int - slo  * x + gap / (1 + x / sca), pmu = c(0,0))
-# bnlr(y=y_cbind, mu = ~ int - slo  ^ x , pmu = c(0,0))
-# 
-# 
-# logitJams=glm(jamsHere~latRange_25,data=fitData,family = binomial,na.action = na.fail)
-# summary(logitJams)
-# 
-# # pr = 1/(1 + exp(-(...)))
-# 
-# nls(jamsHere~1/(1 + exp(-(a+b*latRange_25))),data=fitData,start=list(a=0,b=0))
-# 
-# nls(jamsHere~1/(1 + exp(-( (UAA-1)*p^UAA ))),data=fitData,start=list(p=0.1))
+nsvData=nsvData[complete.cases(nsvData),]
+nrow(nsvData)/10 # km
+hist(nsvData$elevation)
+3200 * 3.2808
+#unreasonably small min basin size used here, so stream network is oddly long
+#actually 69 km of streams in neo model - ~41% surveyed

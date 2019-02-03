@@ -7,7 +7,7 @@ source('~/R/projects/mapRespAndLogs/dataByBatch.R')
 
 leakyDB=dbConnect(SQLite(),"C:/Users/sam/Documents/LeakyRivers/Data/sqLiteDatabase/LeakyDB.db")
 #dbGetQuery(leakyDB,"SELECT * FROM Batches")
-#dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
+dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
 
 #grab from segments - common denominator
 widthData=dataByBatch(6)[,c("locationIDX","wettedWidth","bankfullWidth","elevation","latRange_10",
@@ -34,6 +34,8 @@ abline(a=0,b=1)
 l=lm(widthData$wettedWidth~widthData$UAA*widthData$slope*widthData$denseJamProbability*widthData$latRange_25,na.action=na.fail)
 dredge(l,extra="R^2")
 
+
+#this one
 widthMod=lm(log(wettedWidth)~denseJamProbability*(latRange_25+slope*UAA)+latRange_25:slope,data=widthData,na.action=na.fail)
 summary(widthMod)
 plot(widthData$wettedWidth~I(exp(predict(widthMod))))
@@ -46,3 +48,4 @@ widthPredict=left_join(widthPredict,jamHabitatProb)
 
 widthPredict$width=predict(widthMod,newdata=widthPredict)
 write.csv(widthPredict,"segs_width_jamHabitat.csv")
+

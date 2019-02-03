@@ -1,7 +1,9 @@
+#set min and max er, consider units.....
+
 sampleRespFromProbs=function(denseJamProbs,minER=50){
   source('~/R/projects/mapRespAndLogs/dataByBatch.R')
   #define metabModel
-  metabData=dataByBatch(3,excludeDataTypeIDXs = c(37,58))
+  metabData=dataByBatch(3,excludeDataTypeIDXs = c(39,60))
   metabModel=lm(-ER~mean_jamsPerKm,data=metabData)
   
   #denseJam distribution
