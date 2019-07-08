@@ -1,51 +1,60 @@
-library(RSQLite)
-library(reshape2)
-library(dplyr)
-library(PerformanceAnalytics)
-library(MuMIn)
-source('~/R/projects/mapRespAndLogs/dataByBatch.R')
+getWidthFun=function(){
+  library(RSQLite)
+  library(reshape2)
+  library(dplyr)
+  library(PerformanceAnalytics)
+  library(MuMIn)
+  source('~/R/projects/mapRespAndLogs/dataByBatch.R')
+  
+  leakyDB=dbConnect(SQLite(),"C:/Users/sam/Documents/LeakyRivers/Data/sqLiteDatabase/LeakyDB.db")
+  dbGetQuery(leakyDB,"SELECT * FROM Batches")
+  dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
+  
+  wbWidths=dataByBatch(4)
+  msWidths=dataByBatch(1)
+  
+  wbWidths=wbWidths[,names(wbWidths)%in%names(msWidths)]
+  
+  names(msWidths)[!names(msWidths)%in%names(wbWidths)]
+  msWidths=msWidths[,names(msWidths)%in%names(wbWidths)]
+  
+  allWidths=rbind(wbWidths,msWidths)
+  names(allWidths)
 
-leakyDB=dbConnect(SQLite(),"C:/Users/sam/Documents/LeakyRivers/Data/sqLiteDatabase/LeakyDB.db")
-#dbGetQuery(leakyDB,"SELECT * FROM Batches")
-dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
-
-#grab from segments - common denominator
-widthData=dataByBatch(6)[,c("locationIDX","wettedWidth","bankfullWidth","elevation","latRange_10",
-                            "latRange_25","latRange_50","slope","SPI","UAA")]
-jamHabitatProb=read.csv("predictedDenseJamProbability.csv")[,c("locationIDX","denseJamProbability")]
-
-widthData=left_join(widthData,jamHabitatProb)
-widthData$locationIDX=NULL
-
-widthData=widthData[complete.cases(widthData),]
-
-
-windows()
-chart.Correlation(widthData)
-plot(widthData$wettedWidth~widthData$UAA)
-plot(widthData$wettedWidth~widthData$denseJamProbability)
-luna=nls(wettedWidth~i+a*UAA^b,data=widthData,
-       start=list(i=0,a=1,b=0.4))
-summary(luna)
-plot(widthData$wettedWidth~predict(luna))
-abline(a=0,b=1)
-
-
-l=lm(widthData$wettedWidth~widthData$UAA*widthData$slope*widthData$denseJamProbability*widthData$latRange_25,na.action=na.fail)
-dredge(l,extra="R^2")
-
-
-#this one
-widthMod=lm(log(wettedWidth)~denseJamProbability*(latRange_25+slope*UAA)+latRange_25:slope,data=widthData,na.action=na.fail)
-summary(widthMod)
-plot(widthData$wettedWidth~I(exp(predict(widthMod))))
-abline(a=0,b=1)
-
-
-
-widthPredict=dataByBatch(6)[,c("locationIDX","latRange_25","slope","UAA")]
-widthPredict=left_join(widthPredict,jamHabitatProb)
-
-widthPredict$width=predict(widthMod,newdata=widthPredict)
-write.csv(widthPredict,"segs_width_jamHabitat.csv")
-
+  allWidths$wettedWidth=allWidths$mean_wettedWidth
+  allWidths=allWidths[,c("locationIDX","bankfullWidth","wettedWidth","mean_channelCount","mean_elevation","mean_individualBankfullWidth","mean_jamsPerKm","mean_latRange_10","mean_latRange_25","mean_minLatRange_10","mean_minLatRange_25","mean_slope","mean_slope_25","mean_SPI","mean_UAA","mean_valleyWidth_05","mean_valleyWidth_1")]
+  
+  sum(!is.na(allWidths$bankfullWidth))
+  sum(!is.na(allWidths$wettedWidth))
+  
+  
+  
+  ww_bw=lm(mean_wettedWidth~bankfullWidth,data=msWidths)
+  summary(ww_bw)
+  #ww = 0.37644 + bw * 0.76634
+  plot(msWidths$mean_wettedWidth~msWidths$bankfullWidth,ylab="Wetted Width (m)",xlab="Bankfull Width (m)")
+  abline(ww_bw)
+  
+  allWidths$wettedWidth[is.na(allWidths$wettedWidth)]=predict.lm(ww_bw,newdata=data.frame(bankfullWidth=allWidths$bankfullWidth[is.na(allWidths$wettedWidth)]))
+  
+  #allWidths$fitWidth=allWidths$bankfullWidth*0.8593
+  allWidths$fitWidth=allWidths$wettedWidth
+  #luna=nls(fitWidth~a*UAA^b + c*channelCount*UAA^b,data=allWidths,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
+  
+  #luna=nls(fitWidth~a*UAA^b + c*channelCount*UAA^b + j*(jamsPerKm/channelCount)*UAA^b,data=allWidths,start=list(a=1,b=0.4,c=1,j=1),control = nls.control(maxiter=5000))
+  
+  
+  luna=nls(fitWidth~ a*UAA^b + c*(channelCount-1)*a*UAA^b  ,data=allWidths,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
+  
+  #luna=nls(fitWidth~ a*UAA^b + c*(jamsPerKm)*a*UAA^b  ,data=allWidths,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
+  
+ 
+  summary(luna)
+  
+  plot(predict(luna)~allWidths$fitWidth)
+  #points(predict(luna_c)~allWidths$fitWidth,pch="*")
+  
+  abline(a=0,b=1)
+  
+  return(luna)
+}

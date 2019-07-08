@@ -12,18 +12,22 @@ dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
 wlData=dataByBatch(4)[,c("locationIDX","jamsPerKm","mean_latRange_10","mean_elevation","mean_slope","mean_SPI","mean_UAA")]
 hist(wlData$jamsPerKm)
 sum(wlData$jamsPerKm<=5)/nrow(wlData)
-wbData=dataByBatch(5)[,c("locationIDX","jamsPerKm","mean_latRange_10","mean_elevation","mean_slope","mean_SPI","mean_UAA")]
-hist(wbData$jamsPerKm)
-sum(wbData$jamsPerKm<=5)/nrow(wbData)
+#wbData=dataByBatch(5)[,c("locationIDX","jamsPerKm","mean_latRange_10","mean_elevation","mean_slope","mean_SPI","mean_UAA")]
+#hist(wbData$jamsPerKm)
+#sum(wbData$jamsPerKm<=5)/nrow(wbData)
 
-jamData=rbind(wlData,wbData)
+#jamData=rbind(wlData,wbData)
+jamData=wlData
 
 wlDataCats=dataByBatch(4,meow=T)
-wbDataCats=dataByBatch(5,meow=T)
+#wbDataCats=dataByBatch(5,meow=T)
 
 #i'm going to use my dem-derived 'confinement' term, but I need something for land use / mgmt
-jamDataCats=rbind(wlDataCats[wlDataCats$dataTypeIDX==22,][,c("locationIDX","value")],
-                  wbDataCats[wbDataCats$dataTypeIDX==42,][,c("locationIDX","value")])
+# jamDataCats=rbind(wlDataCats[wlDataCats$dataTypeIDX==22,][,c("locationIDX","value")],
+#                   wbDataCats[wbDataCats$dataTypeIDX==42,][,c("locationIDX","value")])
+
+jamDataCats=wlDataCats[wlDataCats$dataTypeIDX==22,][,c("locationIDX","value")]
+
 names(jamDataCats)[2]="mgmt"
 jamData=left_join(jamData,jamDataCats)
 
@@ -57,9 +61,9 @@ fitData$lUAA=log(fitData$mean_UAA)
 
 #logitJams=glm(jamsHere~isManaged+(mean_elevation*poly(lUAA,2)*mean_latRange_10)^2,weights = fitData$weight ,data=fitData,family = binomial,na.action = na.fail)
 
-logitJams=glm(jamsHere~isManaged+mean_elevation+poly(lUAA,2)+mean_latRange_10,weights = fitData$weight ,data=fitData,family = binomial,na.action = na.fail)
+logitJams=glm(jamsHere~isManaged+mean_elevation+poly(lUAA,2)+mean_latRange_10,data=fitData,family = binomial,na.action = na.fail)
 
-logitJams=glm(jamsHere~poly(lUAA,2),weights = fitData$weight ,data=fitData,family = binomial,na.action = na.fail)
+logitJams=glm(jamsHere~mean_latRange_10+isManaged:mean_latRange_10+poly(lUAA,2),data=fitData,family = binomial,na.action = na.fail)
 
 
 summary(logitJams)
