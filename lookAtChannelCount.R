@@ -32,9 +32,9 @@ widthData=left_join(widthData,widthDataCats[,c("locationIDX","landUse")])
 widthData[widthData$landUse=="YM",]
 allCountData=rbind(widthData,allCountData)
 
-boxplot(allCountData$channelCount~allCountData$landUse=="YM")
+boxplot(allCountData$channelCount~allCountData$landUse=="YM",log="y")
 
-hist(allCountData$channelCount,breaks=seq(from=0,to=10,by=0.5),ylim=c(0,100))
+hist(allCountData$channelCount[allCountData$landUse!="YM"],breaks=seq(from=0,to=10,by=0.5),ylim=c(0,100))
 par(new=T)
 hist(allCountData$channelCount[allCountData$landUse=="YM"],density=20,breaks=seq(from=0,to=10,by=0.5),ylim=c(0,100),main="",xlab="",ylab="")
 
@@ -42,8 +42,8 @@ hist(round(allCountData$channelCount),breaks=seq(from=0,to=10,by=1),ylim=c(0,120
 par(new=T)
 hist(round(allCountData$channelCount[allCountData$landUse=="YM"]),density=20,breaks=seq(from=0,to=10,by=1),ylim=c(0,120),main="",xlab="",ylab="")
 
-plot(density(allCountData$channelCount),ylim=c(0,12))
-lines(density(allCountData$channelCount[allCountData$landUse=="YM"]),col="blue")
+plot(density(allCountData$channelCount[allCountData$landUse!="YM"],from=1,adjust=0.6),ylim=c(0,12))
+lines(density(allCountData$channelCount[allCountData$landUse=="YM"],from=1,adjust=1.8),col="blue")
 
 sum(allCountData$landUse=="YM")
 sum(allCountData$landUse!="YM")

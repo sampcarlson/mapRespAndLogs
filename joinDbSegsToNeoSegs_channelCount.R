@@ -1,3 +1,4 @@
+library(stats)
 library(RSQLite)
 library(reshape2)
 library(sp)
@@ -10,6 +11,10 @@ library(MuMIn)
 library(MASS)
 library(RColorBrewer)
 library(rgdal)
+
+fittedLoggingEffect=0.501
+fittedLoggingEffect.min=0.301
+fittedLoggingEffect.max=0.835
 
 source("C:/Users/sam/Documents/R/projects/rGrassTools/grassTools.r")
 source('~/R/projects/mapRespAndLogs/dataByBatch.R')
@@ -92,8 +97,8 @@ addBatchDataToNeoNetwork=function(returnVars=returnVars,batchID=5){
   return(neoResultDF)
 }
 
-neoDF=addBatchDataToNeoNetwork(returnVars=c("jamsPerKm","channelCount","UAA","elevation","latRange_10","slope"))
-write.csv(neoDF,"neoDF.csv")
+#neoDF=addBatchDataToNeoNetwork(returnVars=c("jamsPerKm","channelCount","UAA","elevation","latRange_10","slope"))
+#write.csv(neoDF,"neoDF.csv")
 
 neoDF=read.csv("neoDF.csv")
 #neoDF$channelCount[is.na(neoDF$channelCount)]=1
@@ -149,9 +154,9 @@ respGlm=buildRespGlm()
 #predict and write-------
 
 neoDF$jamsPerKm_unlogged=neoDF$jamsPerKm
-neoDF$jamsPerKm_logged=(exp(-0.9480)*neoDF$jamsPerKm)
-neoDF$jamsPerKm_logged_minConfInt=(exp((-0.9480+(1.96*0.2969)))*neoDF$jamsPerKm)
-neoDF$jamsPerKm_logged_maxConfInt=(exp((-0.9480-(1.96*0.2967)))*neoDF$jamsPerKm)
+neoDF$jamsPerKm_logged=fittedLoggingEffect*neoDF$jamsPerKm
+neoDF$jamsPerKm_logged_minConfInt=fittedLoggingEffect.min*neoDF$jamsPerKm
+neoDF$jamsPerKm_logged_maxConfInt=fittedLoggingEffect.max*neoDF$jamsPerKm
 #neoDF$jamsPerKm_logged=(exp(-1.26829)*neoDF$jamsPerKm)/neoDF$channelCount
 
 
@@ -164,8 +169,8 @@ mean(neoDF$jamDiff)
 neoDF$channelCountOld=neoDF$channelCount
 neoDF$channelCount[is.na(neoDF$channelCount)]=1
 
-neoDF$width_unlogged=predict(widthFun,newdata=data.frame(UAA=neoDF$UAA,channelCount=neoDF$channelCount))
-neoDF$width_logged=predict(widthFun,newdata=data.frame(UAA=neoDF$UAA,channelCount=1))
+neoDF$width_unlogged=predict(widthFun,newdata=data.frame(mean_UAA=neoDF$UAA,mean_channelCount=neoDF$channelCount))
+neoDF$width_logged=predict(widthFun,newdata=data.frame(mean_UAA=neoDF$UAA,mean_channelCount=1))
 
 neoDF$channelCount=neoDF$channelCountOld
 
@@ -191,4 +196,4 @@ neoPredictDF$jamsPerKm_unlogged_single=neoPredictDF$jamsPerKm_unlogged
 neoPredictDF$width_unlogged_single=neoPredictDF$width_logged
 neoPredictDF$resp_unlogged_single=neoPredictDF$resp_unlogged
 
-write.csv(neoPredictDF,"C:/Users/sam/Dropbox/Logjams/defineRespAndJams/neoPredictDf.csv")
+write.csv(neoPredictDF,"C:/Users/sam/Documents/LeakyRivers/modelEnv/parameterDefs/neoPredictDf.csv")

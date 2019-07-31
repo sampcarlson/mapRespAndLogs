@@ -7,8 +7,8 @@ getWidthFun=function(){
   source('~/R/projects/mapRespAndLogs/dataByBatch.R')
   
   leakyDB=dbConnect(SQLite(),"C:/Users/sam/Documents/LeakyRivers/Data/sqLiteDatabase/LeakyDB.db")
-  dbGetQuery(leakyDB,"SELECT * FROM Batches")
-  dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
+  #dbGetQuery(leakyDB,"SELECT * FROM Batches")
+  #dbGetQuery(leakyDB,"SELECT * FROM DataTypes")
   
   wbWidths=dataByBatch(4)
   msWidths=dataByBatch(1)
@@ -36,25 +36,54 @@ getWidthFun=function(){
   abline(ww_bw)
   
   allWidths$wettedWidth[is.na(allWidths$wettedWidth)]=predict.lm(ww_bw,newdata=data.frame(bankfullWidth=allWidths$bankfullWidth[is.na(allWidths$wettedWidth)]))
+  #allWidths$mean_channelCount=round(allWidths$mean_channelCount)
+
+  #luna=nls(wettedWidth~a*mean_UAA^b + c*mean_channelCount*mean_UAA^b,data=allWidths,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
   
-  #allWidths$fitWidth=allWidths$bankfullWidth*0.8593
-  allWidths$fitWidth=allWidths$wettedWidth
-  #luna=nls(fitWidth~a*UAA^b + c*channelCount*UAA^b,data=allWidths,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
+  #luna=nls(wettedWidth~a*mean_UAA^b + c*mean_channelCount*mean_UAA^b + j*(mean_jamsPerKm/mean_channelCount)*mean_UAA^b,data=allWidths,start=list(a=1,b=0.4,c=1,j=1),control = nls.control(maxiter=5000))
+  fitData=allWidths[,c("wettedWidth","mean_channelCount","mean_UAA","mean_slope")]
+  fitData=fitData[complete.cases(fitData),]
   
-  #luna=nls(fitWidth~a*UAA^b + c*channelCount*UAA^b + j*(jamsPerKm/channelCount)*UAA^b,data=allWidths,start=list(a=1,b=0.4,c=1,j=1),control = nls.control(maxiter=5000))
+  luna=nls(wettedWidth~ a*mean_UAA^b + c*(mean_channelCount-1)*a*mean_UAA^b  ,data=fitData,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
   
   
-  luna=nls(fitWidth~ a*UAA^b + c*(channelCount-1)*a*UAA^b  ,data=allWidths,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
+  #luna=nls(wettedWidth~ a*mean_UAA^b + c*(mean_jamsPerKm)*a*mean_UAA^b  ,data=allWidths,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
+  plot(allWidths$wettedWidth~allWidths$mean_UAA)
   
-  #luna=nls(fitWidth~ a*UAA^b + c*(jamsPerKm)*a*UAA^b  ,data=allWidths,start=list(a=1,b=0.4,c=1),control = nls.control(maxiter=5000))
+  plot(allWidths$wettedWidth~round(allWidths$mean_channelCount))
   
- 
+  plot(allWidths$wettedWidth~allWidths$mean_jamsPerKm)
+  
+  plot(allWidths$wettedWidth~allWidths$mean_slope)
+  
   summary(luna)
   
-  plot(predict(luna)~allWidths$fitWidth)
-  #points(predict(luna_c)~allWidths$fitWidth,pch="*")
-  
+  scalar=115
+  png(height=4*scalar,width=4*scalar,filename = "widthModelFit.png")
+  plot(predict(luna)~fitData$wettedWidth,xlab="Observed wetted width (m)", ylab="Predicted wetted width (m)",cex=1.5,log="xy")
   abline(a=0,b=1)
+  dev.off()
+  
+  wlDataCats=dataByBatch(3,meow=T)
+  wbDataCats=dataByBatch(4,meow=T)
+  cats=rbind(wlDataCats,wbDataCats)
+  cats=cats[cats$metric=="landUse",]
+  cats$isManaged=cats$value=="YM"
+  cats=cats[,c("locationIDX","isManaged")]
+  
+  allWidths=left_join(allWidths,cats,by="locationIDX")
+  
+  nsv_locations=dbGetQuery(leakyDB,"SELECT * FROM Locations WHERE watershedID = 'NSV_def'")
+  allWidths$isNSV=allWidths$locationIDX %in% nsv_locations$locationIDX
+  allWidths$mean_channelCount[is.na(allWidths$mean_channelCount)]=1
+  allWidths$channelCount_int=round(allWidths$mean_channelCount)
+  allWidths$wettedWidthLogged=allWidths$wettedWidth/allWidths$channelCount_int
+  
+  scalar=200
+  png(height=4*scalar,width=4*scalar,filename = "widthModelFit.png")
+  plot(allWidths$wettedWidth[allWidths$isNSV]~allWidths$mean_UAA[allWidths$isNSV])
+  points(allWidths$wettedWidthLogged[allWidths$isNSV]~allWidths$mean_UAA[allWidths$isNSV],pch="*")
+  points(allWidths$wettedWidth[allWidths$isManaged]~allWidths$mean_UAA[allWidths$isManaged],pch=2)
   
   return(luna)
 }

@@ -44,23 +44,25 @@ addBatchDataToNeoNetwork=function(returnVars,batchID=6){
     print(paste("mean dist from seg ",autoCat,"to db pts = ",round(mean(distFromSeg$dist,na.rm=T)),"m"))
     thisNeoSegData=inner_join(distFromSeg,allPtData,by=c("to_attr"="locationIDX"))
     for(addVar in returnVars){
-      thisVal=mean(thisNeoSegData[,addVar],na.rm=T)
+      thisVal=median(thisNeoSegData[,addVar],na.rm=T)
       neoResultDF[neoResultDF$AUTO==autoCat,addVar]=thisVal
     }
   }
   return(neoResultDF)
 }
 
-neoDF=addBatchDataToNeoNetwork(returnVars=c("latRange_10","UAA","elevation"))
-neoDF$lUAA=log(neoDF$UAA)
-write.csv(neoDF,"neoDF.csv")
+#neoDF=addBatchDataToNeoNetwork(returnVars=c("minLatRange_25","latRange_10","UAA","elevation","slope"))
+#neoDF$lUAA=log(neoDF$UAA)
+#neoDF$isConf3=neoDF$minLatRange_25>3
+#write.csv(neoDF,"neoDF.csv")
 
+neoDF=read.csv("neoDF.csv")
 ######build jam glm--------------
 buildJamGlm=function(){
   leakyDB=dbConnect(SQLite(),"C:/Users/sam/Documents/LeakyRivers/Data/sqLiteDatabase/LeakyDB.db")
   
-  wlData=dataByBatch(4)[,c("locationIDX","jamsPerKm","mean_elevation","mean_latRange_10","mean_latRange_25","mean_minLatRange_10","mean_minLatRange_25","mean_slope","mean_SPI","mean_UAA","jamCount","channelLength")]
-  wbData=dataByBatch(5)[,c("locationIDX","jamsPerKm","mean_elevation","mean_latRange_10","mean_latRange_25","mean_minLatRange_10","mean_minLatRange_25","mean_slope","mean_SPI","mean_UAA","jamCount","channelLength")]
+  wlData=dataByBatch(4)[,c("locationIDX","jamsPerKm","med_elevation","med_latRange_10","med_latRange_25","med_minLatRange_10","med_minLatRange_25","med_slope","med_SPI","med_UAA","jamCount","channelLength")]
+  wbData=dataByBatch(5)[,c("locationIDX","jamsPerKm","med_elevation","med_latRange_10","med_latRange_25","med_minLatRange_10","med_minLatRange_25","med_slope","med_SPI","med_UAA","jamCount","channelLength")]
   jamData=rbind(wlData,wbData)
   
   wlDataCats=dataByBatch(4,meow=T)
@@ -82,17 +84,19 @@ buildJamGlm=function(){
   
   
   nsv_locations=dbGetQuery(leakyDB,"SELECT locationIDX FROM Locations WHERE Locations.watershedID = 'NSV_def'")
-  jamData=inner_join(jamData,nsv_locations)
+  #jamData=inner_join(jamData,nsv_locations)
   
   fitData=jamData[complete.cases(jamData),]
   
   fitData$isUnconf=fitData$confinement=="U"
   fitData$isConf=fitData$confinement=="C"
   
-  fitData$lUAA=log(fitData$mean_UAA)
+  fitData$lUAA=log(fitData$med_UAA)
   fitData$channelLength=fitData$channelLength/1000 # convert to km for jams/km offset
   
-  jamGlm=glm.nb(jamCount~mean_latRange_10+lUAA+I(lUAA^2)+mean_elevation:(lUAA+I(lUAA^2))+offset(log(channelLength)),data=fitData,na.action=na.fail,control = glm.control(maxit=500))
+  
+
+  jamGlm=glm.nb(jamCount~isManaged+(lUAA+I(lUAA^2))+as.numeric(!isManaged):med_latRange_10+offset(log(channelLength)),data=fitData,na.action=na.fail)
   
   return(jamGlm)
 }
@@ -101,31 +105,56 @@ jamGlm=buildJamGlm()
 #####build resp glm--------------
 buildRespGlm=function(){
   leakyDB=dbConnect(SQLite(),"C:/Users/sam/Documents/LeakyRivers/Data/sqLiteDatabase/LeakyDB.db")
-
+  metabData=dataByBatch(3,excludeDataTypeIDXs = c(77))
+  
   #ER is in mmol 02 m^-2 day^-1
   #convert to g O2 m^-2 day^-1
   
   metabData$ER_g=-metabData$ER*32/1000
-  plot(metabData$mean_jamsPerKm,metabData$ER_g)
-  metabModel_g=lm(ER_g~mean_jamsPerKm,data=metabData)
-
+  #plot(metabData$med_jamsPerKm,metabData$ER_g)
+  metabModel_g=lm(ER_g~med_jamsPerKm,data=metabData)
+  
   return(metabModel_g)
   
 }
 respGlm=buildRespGlm()
 
 #predict and write-------
-neoDF$jamsPerKm=exp(predict(jamGlm,newdata=data.frame(mean_latRange_10=neoDF$latRange_10,
-                                                      lUAA=neoDF$lUAA,
-                                                      mean_elevation=neoDF$elevation,
-                                                      channelLength=1)))
-hist(neoDF$jamDensity)
+neoDF$jamsPerKm_unlogged=exp(predict(jamGlm,newdata=data.frame(med_latRange_10=neoDF$latRange_10,
+                                                               med_minLatRange_25=neoDF$minLatRange_25,
+                                                               lUAA=neoDF$lUAA,
+                                                               med_elevation=neoDF$elevation,
+                                                               med_slope=neoDF$slope,
+                                                               isManaged=F,
+                                                               channelLength=1)))
+neoDF$jamsPerKm_logged=exp(predict(jamGlm,newdata=data.frame(med_latRange_10=neoDF$latRange_10,
+                                                             med_minLatRange_25=neoDF$minLatRange_25,
+                                                             lUAA=neoDF$lUAA,
+                                                             med_elevation=neoDF$elevation,
+                                                             med_slope=neoDF$slope,
+                                                             isManaged=T,
+                                                             channelLength=1)))
+neoDF$jamsPerKm_logged[neoDF$elevation>3400]=0
+neoDF$jamsPerKm_unlogged[neoDF$elevation>3400]=0
 
-#g O2 m^-2 day^-1
-neoDF$R_g_d=predict(respGlm,newdata=data.frame(mean_jamsPerKm=neoDF$jamsPerKm))
 
+hist(neoDF$jamsPerKm_unlogged)
+hist(neoDF$jamsPerKm_logged)
+neoDF$jamDiff=neoDF$jamsPerKm_unlogged-neoDF$jamsPerKm_logged
+hist(neoDF$jamDiff)
+mean(neoDF$jamDiff)
+plot(neoDF$jamDiff~neoDF$latRange_10,ylim=c(-1,1))
+
+plot(neoDF$jamDiff~neoDF$latRange_10)
+
+
+plot(neoDF$jamsPerKm_unlogged~neoDF$lUAA)
+points(neoDF$jamsPerKm_logged~neoDF$lUAA,pch=2)
+
+#resp fitted as g O2 m^-2 day^-1
 #need R as mg O2 m−2 sec−1 
-neoDF$resp=neoDF$R_g_d*(1000/86400)
+neoDF$resp_logged=predict(respGlm,newdata=data.frame(med_jamsPerKm=neoDF$jamsPerKm_logged))*(1000/86400)
+neoDF$resp_unlogged=predict(respGlm,newdata=data.frame(med_jamsPerKm=neoDF$jamsPerKm_unlogged))*(1000/86400)
 
-neoPredictDF=neoDF[,c("AUTO","jamsPerKm","resp")]
+neoPredictDF=neoDF[,c("AUTO","jamsPerKm_unlogged","jamsPerKm_logged","resp_unlogged","resp_logged")]
 write.csv(neoPredictDF,"C:/Users/sam/Dropbox/Logjams/defineRespAndJams/neoPredictDf.csv")

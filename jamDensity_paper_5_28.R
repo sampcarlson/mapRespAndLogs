@@ -83,6 +83,35 @@ m1=get.models(d,subset=1)[[1]]
 m2=get.models(d,subset=2)[[1]]
 m3=get.models(d,subset=3)[[1]]
 
+d_noInteraction=d[is.na(d$`isManaged:isUnconf`)]
+sum(d_noInteraction$isManaged*d_noInteraction$weight,na.rm=T)
+
+
+mdf=data.frame(model=c(1:3),
+               min=exp(c(coef(summary(m1))["isManaged","Estimate"]-1.96*coef(summary(m1))["isManaged","Std. Error"],
+                         coef(summary(m2))["isManaged","Estimate"]-1.96*coef(summary(m2))["isManaged","Std. Error"],
+                         coef(summary(m3))["isManaged","Estimate"]-1.96*coef(summary(m3))["isManaged","Std. Error"])),
+               est=exp(c(coef(summary(m1))["isManaged","Estimate"],
+                         coef(summary(m2))["isManaged","Estimate"],
+                         coef(summary(m3))["isManaged","Estimate"])),
+               max=exp(c(coef(summary(m1))["isManaged","Estimate"]+1.96*coef(summary(m1))["isManaged","Std. Error"],
+                         coef(summary(m2))["isManaged","Estimate"]+1.96*coef(summary(m2))["isManaged","Std. Error"],
+                         coef(summary(m3))["isManaged","Estimate"]+1.96*coef(summary(m3))["isManaged","Std. Error"])))
+
+
+mdf=rbind(mdf,data.frame(model="mean",
+                         min=exp(mean(c(coef(summary(m1))["isManaged","Estimate"]-1.96*coef(summary(m1))["isManaged","Std. Error"],
+                                        coef(summary(m2))["isManaged","Estimate"]-1.96*coef(summary(m2))["isManaged","Std. Error"],
+                                        coef(summary(m3))["isManaged","Estimate"]-1.96*coef(summary(m3))["isManaged","Std. Error"]))),
+                         est=exp(mean(c(coef(summary(m1))["isManaged","Estimate"],
+                                        coef(summary(m2))["isManaged","Estimate"],
+                                        coef(summary(m3))["isManaged","Estimate"]))),
+                         max=exp(mean(c(coef(summary(m1))["isManaged","Estimate"]+1.96*coef(summary(m1))["isManaged","Std. Error"],
+                                        coef(summary(m2))["isManaged","Estimate"]+1.96*coef(summary(m2))["isManaged","Std. Error"],
+                                        coef(summary(m3))["isManaged","Estimate"]+1.96*coef(summary(m3))["isManaged","Std. Error"])))))
+
+xtable(mdf,digits=3)
+
 
 scalar=240
 png(height=3*scalar,width=5*scalar,filename = "fitEffects.png")
@@ -147,17 +176,3 @@ boxplot(predict(m3,type="response")~fitData$isUnconf,ylab="Predicted Jam Count",
 mtext(side=1,"Management History",line=3)
 
 dev.off()
-
-######jam density prediction performance plot------------
-nsv_locations=dbGetQuery(leakyDB,"SELECT * FROM Locations WHERE watershedID = 'NSV_def'")
-fitData$isNSV=fitData$locationIDX %in% nsv_locations$locationIDX
-
-#only 19 logged points?
-scalar=200
-png(height=3*scalar,width=5*scalar,filename = "jamPerformance.png")
-plot(fitData$jamsPerKm[fitData$isNSV]~exp(fitData$lUAA[fitData$isNSV]),log="x",cex=1.5,xlim=c(4,80))
-points(fitData$jamsPerKm[fitData$isNSV]/2~exp(fitData$lUAA[fitData$isNSV]),pch=16)
-points(fitData$jamsPerKm[fitData$isManaged==1]~exp(fitData$lUAA[fitData$isManaged==1]),pch="*")
-
-dev.off()
-
